@@ -116,10 +116,7 @@ class Server
     loop do
       message = connection.gets.chomp
       (@connections_details[:clients]).keys.each do |client|
-        if message == "quit"
-          socket.close
-        else
-          array = message.split(" ")
+        array = message.split(" ")
           if validate_command(array)
             cm = array[0]
             key = array[1]
@@ -165,17 +162,17 @@ class Server
               array.each do |n|
                 if @hash_value.has_key?(n)
                   date = Time.now
-                  date_value = @hash_date["#{key}"]
+                  date_value = @hash_date["#{n}"]
                   diference = date - date_value
-                  if diference < @hash_exptime["#{key}"] || @hash_exptime["#{key}"] == 0
-                    @connections_details[:clients][client].puts "#{@hash_value["#{key}"]} #{key}  #{@hash_flag["#{key}"]}  #{@hash_bytes["#{key}"]}"
+                  if diference < @hash_exptime["#{n}"] || @hash_exptime["#{n}"] == 0
+                    @connections_details[:clients][client].puts "#{@hash_value["#{n}"]} #{n}  #{@hash_flag["#{n}"]}  #{@hash_bytes["#{n}"]}"
                   else
-                    @hash_value.delete(key)
-                    @hash_token.delete(key)
-                    @hash_date.delete(key)
-                    @hash_exptime.delete(key)
-                    @hash_bytes.delete(key)
-                    @hash_flag.delete(key)
+                    @hash_value.delete(n)
+                    @hash_token.delete(n)
+                    @hash_date.delete(n)
+                    @hash_exptime.delete(n)
+                    @hash_bytes.delete(n)
+                    @hash_flag.delete(n)
                   end
                 end
               end
@@ -285,7 +282,6 @@ class Server
             @connections_details[:clients][client].puts "ERROR SYNTAX ERROR"
           end
         end
-      end
     end
   end
 end

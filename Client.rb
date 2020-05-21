@@ -21,7 +21,7 @@ class Client
       end
     rescue IOError => e
       puts e.message
-      # e.backtrace
+      e.backtrace
       @socket.close
     end
 
@@ -33,14 +33,14 @@ class Client
         loop do
           response = @socket.gets.chomp
           puts "#{response}"
-          if response.eql?'quit'
+          if response == "quit"
             @socket.close
           end
         end
       end
     rescue IOError => e
       puts e.message
-      # e.backtrace
+      e.backtrace
       @socket.close
     end
   end
