@@ -1,4 +1,11 @@
 require 'socket'
+require_relative 'datos'
+require_relative 'validation'
+require_relative 'retrieval'
+require_relative 'storage'
+include Retrieval
+include Storage
+
 
 class Server
   def initialize(socket_address, socket_port)
@@ -14,6 +21,8 @@ class Server
     @hash_bytes = Hash.new
     @hash_token = Hash.new
     @hash_date = Hash.new
+    @data = Datos.new(@hash_value,@hash_flag,@hash_exptime,@hash_bytes,@hash_token,@hash_date)
+    @validate = Validation.new
     @connections_details[:server] = @server_socket
     @connections_details[:clients] = @connected_clients
 
@@ -24,92 +33,24 @@ class Server
 
   def run
     loop{
+      semaphore = Mutex.new
       client_connection = @server_socket.accept
       Thread.start(client_connection) do |conn| # open thread for each accepted connection
-        conn_name = conn.gets.chomp.to_sym
-        if @connections_details[:clients][conn_name] != nil # avoid connection if user exits
-          conn.puts "This username already exist"
-          conn.puts "quit"
-          conn.kill self
-        end
+        semaphore.synchronize {
+          conn_name = conn.gets.chomp.to_sym
+          if @connections_details[:clients][conn_name] != nil # avoid connection if user exits
+            conn.puts "This username already exist"
+            conn.puts "quit"
+            conn.kill self
+          end
 
-        puts "Connection established #{conn_name} => #{conn}"
-        @connections_details[:clients][conn_name] = conn
-        conn.puts "Connection established successfully #{conn_name} => #{conn}"
-
-        establish_chatting(conn_name, conn) # allow chatting
+          puts "Connection established #{conn_name} => #{conn}"
+          @connections_details[:clients][conn_name] = conn
+          conn.puts "Connection established successfully #{conn_name} => #{conn}"
+          establish_chatting(conn_name, conn) # allow chatting
+        }
       end
     }.join
-  end
-
-  def validate_command(array)
-    res = false
-    if array[0] == "get"
-      if array.length == 2
-        res = true
-      end
-    end
-    if array[0] == "gets"
-      res = true
-    end
-    if array[0] == "cas"
-      array.length <= 7
-      if valid_pin?(array[2]) && valid_pin?(array[3]) && valid_pin?(array[4]) && valid_pin?(array[5])
-        res = true
-      end
-      if array.length == 7
-        if array[6] != "noreply"
-          res = false
-        end
-      end
-    end
-    if array[0] == "set" || array[0] == "add" || array[0] == "replace" || array[0] == "append" || array[0] == "prepend"
-      if array.length <= 6
-        if valid_pin?(array[2]) && valid_pin?(array[3]) && valid_pin?(array[4])
-          res = true
-        end
-        if array.length == 6
-          if array[5] != "noreply"
-            res = false
-          end
-        end
-      end
-    end
-    res
-  end
-
-  def valid_pin?(coomand_atribute)
-    /^\d{0,100}$/ === coomand_atribute
-  end
-
-
-  def validate_value(value,bytes)
-    res = false
-    if value.length == bytes
-      if value.count('01') == value.size
-        res = true
-      end
-    end
-    res
-  end
-
-  def validate_exptime(expetime)
-    res = true
-    @connections_details[:clients][client].puts " seconds: #{expetime} "
-    date = Time.now
-    date = date + seconds
-
-    if date > Time.now
-      @connections_details[:clients][client].puts "hola bebe"
-      @hash_value.delete("#{key}")
-      @hash_flag.delete("#{key}")
-      @hash_exptime.delete("#{key}")
-      @hash_bytes.delete("#{key}")
-      @hash_date.delete("#{key}")
-      @hash_token.delete("#{key}")
-      res = true
-    end
-    res
   end
 
   def establish_chatting(username, connection)
@@ -117,164 +58,49 @@ class Server
       message = connection.gets.chomp
       (@connections_details[:clients]).keys.each do |client|
         array = message.split(" ")
-          if validate_command(array)
+          if @validate.validate_command(array)
             cm = array[0]
             key = array[1]
             flag = array[2]
             exptime = array[3].to_i
             bytes = array[4].to_i
             noreply = array[5]
+
             case cm
-            when "set"
-              value = connection.gets.chomp
-              if validate_value(value,bytes)
-                @hash_value["#{key}"] = value
-                @hash_flag["#{key}"] = flag
-                @hash_exptime["#{key}"] = exptime
-                @hash_bytes["#{key}"] = bytes
-                @hash_date["#{key}"] = Time.now
-                if noreply != "noreply"
-                  @connections_details[:clients][client].puts "STORED"
-                end
-                else
-                  @connections_details[:clients][client].puts "CLIENT-ERROR"
-                end
+
             when "get"
-              if @hash_value.has_key?(key)
-                date = Time.now
-                date_value = @hash_date["#{key}"]
-                diference = date - date_value
-                if diference < @hash_exptime["#{key}"] || @hash_exptime["#{key}"] == 0
-                  @connections_details[:clients][client].puts "#{@hash_value["#{key}"]} #{key}  #{@hash_flag["#{key}"]}  #{@hash_bytes["#{key}"]}"
-                else
-                  @hash_value.delete(key)
-                  @hash_token.delete(key)
-                  @hash_date.delete(key)
-                  @hash_exptime.delete(key)
-                  @hash_bytes.delete(key)
-                  @hash_flag.delete(key)
-                  @connections_details[:clients][client].puts "NOT_STORED"
-                end
-              else
-                @connections_details[:clients][client].puts "NOT_STORED"
-              end
+              get = Get.new
+              get.get_void(@connections_details,client,key,@data,username)
+
             when "gets"
-              array.each do |n|
-                if @hash_value.has_key?(n)
-                  date = Time.now
-                  date_value = @hash_date["#{n}"]
-                  diference = date - date_value
-                  if diference < @hash_exptime["#{n}"] || @hash_exptime["#{n}"] == 0
-                    @connections_details[:clients][client].puts "#{@hash_value["#{n}"]} #{n}  #{@hash_flag["#{n}"]}  #{@hash_bytes["#{n}"]}"
-                  else
-                    @hash_value.delete(n)
-                    @hash_token.delete(n)
-                    @hash_date.delete(n)
-                    @hash_exptime.delete(n)
-                    @hash_bytes.delete(n)
-                    @hash_flag.delete(n)
-                  end
-                end
-              end
+              gets = Gets.new
+              gets.gets_void(@connections_details,client,@data,username,array)
+            when "set"
+              set = Set.new
+              set.set_void(@connections_details,client,key,bytes,flag,exptime,noreply,@data,@validate,connection)
+
             when "add"
-              if !@hash_value.has_key?(key)
-                value = connection.gets.chomp
-                if validate_value(value,bytes)
-                  @hash_value["#{key}"] = value
-                  @hash_flag["#{key}"] = flag
-                  @hash_exptime["#{key}"] = exptime
-                  @hash_bytes["#{key}"] = bytes
-                  @hash_date["#{key}"] = Time.now
-                  if noreply != "noreply"
-                    @connections_details[:clients][client].puts "STORED"
-                  end
-                else
-                  @connections_details[:clients][client].puts "CLIENT-ERROR"
-                end
-              else
-                @connections_details[:clients][client].puts "NOT_STORED"
-              end
+                add = Add.new
+                add.add_void(@connections_details,client,key,bytes,flag,exptime,noreply,@data,@validate,connection)
+
             when "replace"
-              if @hash_value.has_key?(key)
-                value = connection.gets.chomp
-                if validate_value(value,bytes)
-                  @hash_value["#{key}"] = value
-                  @hash_flag["#{key}"] = flag
-                  @hash_exptime["#{key}"] = exptime
-                  @hash_bytes["#{key}"] = bytes
-                  @hash_date["#{key}"] = Time.now
-                  if noreply != "noreply"
-                    @connections_details[:clients][client].puts "STORED"
-                  end
-                else
-                  @connections_details[:clients][client].puts "CLIENT-ERROR"
-                end
-              else
-                @connections_details[:clients][client].puts "NOT_STORED"
-              end
+                replace = Replace.new
+                replace.replace_void(@connections_details,client,key,bytes,flag,exptime,noreply,@data,@validate,connection)
+
             when "append"
-              if @hash_value.has_key?(key)
-                value = connection.gets.chomp
-                if validate_value(value,bytes)
-                  @hash_value["#{key}"] = @hash_value["#{key}"] + value
-                  @hash_flag["#{key}"] = flag
-                  @hash_exptime["#{key}"] = exptime
-                  @hash_bytes["#{key}"] = @hash_bytes["#{key}"] + bytes
-                  @hash_date["#{key}"] = Time.now
-                  if noreply != "noreply"
-                    @connections_details[:clients][client].puts "STORED"
-                  end
-                else
-                  @connections_details[:clients][client].puts "CLIENT-ERROR"
-                end
-              else
-                @connections_details[:clients][client].puts "NOT_STORED"
-              end
+                append = Append.new
+                append.append_void(@connections_details,client,key,bytes,flag,exptime,noreply,@data,@validate,connection)
+
             when "prepend"
-              if @hash_value.has_key?(key)
-                value = connection.gets.chomp
-                if validate_value(value,bytes)
-                  @hash_value["#{key}"] = value + @hash_value["#{key}"]
-                  @hash_flag["#{key}"] = flag
-                  @hash_exptime["#{key}"] = exptime
-                  @hash_bytes["#{key}"] = @hash_bytes["#{key}"] + bytes
-                  @hash_date["#{key}"] = Time.now
-                  if noreply != "noreply"
-                    @connections_details[:clients][client].puts "STORED"
-                  end
-                else
-                  @connections_details[:clients][client].puts "CLIENT-ERROR"
-                end
-              else
-                @connections_details[:clients][client].puts "NOT_STORED"
-              end
+                prepend = Prepend.new
+                prepend.prepend_void(@connections_details,client,key,bytes,flag,exptime,noreply,@data,@validate,connection)
+
             when "cas"
-              if @hash_value.has_key?(key)
+                cas = Cas.new
                 token = array[5]
-                unless @hash_token.has_key?(key)
-                  @hash_token["#{key}"] = token
-                end
-                if @hash_token["#{key}"] == token
-                  value = connection.gets.chomp
-                  if validate_value(value,bytes)
-                    noreply = array[6]
-                    @hash_value["#{key}"] = value
-                    @hash_flag["#{key}"] = flag
-                    @hash_exptime["#{key}"] = exptime
-                    @hash_bytes["#{key}"] = bytes
-                    @hash_date["#{key}"] = Time.now
-                    if noreply != "noreply"
-                      @connections_details[:clients][client].puts "STORED"
-                    end
-                  else
-                    @connections_details[:clients][client].puts "CLIENT-ERROR"
-                  end
-                else
-                  @connections_details[:clients][client].puts "EXIST"
-                end
-              else
-                @connections_details[:clients][client].puts "NOT_FOUND"
-              end
+                noreply = array[6]
+                cas.cas_void(@connections_details,client,key,token,bytes,flag,exptime,noreply,@data,@validate,connection)
+
             else
               @connections_details[:clients][client].puts "ERROR SYNTAX ERROR"
             end
@@ -287,4 +113,4 @@ class Server
 end
 
 
-Server.new( 8080, "localhost" )
+Server.new( 3000, "localhost" )

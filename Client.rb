@@ -48,5 +48,5 @@ end
 
 
 
-socket = TCPSocket.open( "localhost", 8080 )
+socket = TCPSocket.open( "localhost", 3000 )
 Client.new( socket )
