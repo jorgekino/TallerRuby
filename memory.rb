@@ -1,4 +1,4 @@
-class Datos
+class Memory
   def initialize(hash_value,hash_flag,hash_exptime,hash_bytes,hash_token,hash_date)
     @hash_value = hash_value
     @hash_flag = hash_flag

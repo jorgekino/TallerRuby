@@ -1,5 +1,5 @@
 require 'socket'
-require_relative 'datos'
+require_relative 'memory'
 require_relative 'validation'
 require_relative 'retrieval'
 require_relative 'storage'
@@ -7,10 +7,20 @@ include Retrieval
 include Storage
 
 
-class Server
-  def initialize(socket_address, socket_port)
-    @server_socket = TCPServer.open(socket_port, socket_address)
+CONST_SET = "set"
+CONST_ADD = "add"
+CONST_REPLACE = "replace"
+CONST_APPEND = "append"
+CONST_PREPEND = "prepend"
+CONST_CAS = "cas"
+CONST_GET = "get"
+CONST_GETS = "gets"
 
+class Server
+
+  def initialize(socket_address, socket_port)
+
+    @server_socket = TCPServer.open(socket_port, socket_address)
     @connections_details = Hash.new
     @connected_clients = Hash.new
     @connections_details = Hash.new
@@ -21,34 +31,38 @@ class Server
     @hash_bytes = Hash.new
     @hash_token = Hash.new
     @hash_date = Hash.new
-    @data = Datos.new(@hash_value,@hash_flag,@hash_exptime,@hash_bytes,@hash_token,@hash_date)
+    @data = Memory.new(@hash_value, @hash_flag, @hash_exptime, @hash_bytes, @hash_token, @hash_date)
     @validate = Validation.new
     @connections_details[:server] = @server_socket
     @connections_details[:clients] = @connected_clients
+    @set = Sets.new
+    @add = Add.new
+    @replace = Replace.new
+    @prepend = Prepend.new
+    @append = Append.new
+    @cas = Cas.new
+    @get = Get.new
+    @gets = Gets.new
+    @semaphore = Mutex.new
 
     puts 'Started server.........'
     run
-
   end
 
   def run
     loop{
-      semaphore = Mutex.new
       client_connection = @server_socket.accept
-      Thread.start(client_connection) do |conn| # open thread for each accepted connection
-        semaphore.synchronize {
+      Thread.start(client_connection) do |conn|
           conn_name = conn.gets.chomp.to_sym
-          if @connections_details[:clients][conn_name] != nil # avoid connection if user exits
+          if @connections_details[:clients][conn_name] != nil
             conn.puts "This username already exist"
             conn.puts "quit"
             conn.kill self
           end
-
           puts "Connection established #{conn_name} => #{conn}"
           @connections_details[:clients][conn_name] = conn
           conn.puts "Connection established successfully #{conn_name} => #{conn}"
-          establish_chatting(conn_name, conn) # allow chatting
-        }
+        establish_chatting(conn_name, conn)
       end
     }.join
   end
@@ -57,7 +71,8 @@ class Server
     loop do
       message = connection.gets.chomp
       (@connections_details[:clients]).keys.each do |client|
-        array = message.split(" ")
+        if client == username
+          array = message.split(" ")
           if @validate.validate_command(array)
             cm = array[0]
             key = array[1]
@@ -68,49 +83,52 @@ class Server
 
             case cm
 
-            when "get"
-              get = Get.new
-              get.get_void(@connections_details,client,key,@data,username)
+            when CONST_GET
 
-            when "gets"
-              gets = Gets.new
-              gets.gets_void(@connections_details,client,@data,username,array)
-            when "set"
-              set = Set.new
-              set.set_void(@connections_details,client,key,bytes,flag,exptime,noreply,@data,@validate,connection)
+              @get.get_void(@connections_details, client, key, @data)
 
-            when "add"
-                add = Add.new
-                add.add_void(@connections_details,client,key,bytes,flag,exptime,noreply,@data,@validate,connection)
+            when CONST_GETS
 
-            when "replace"
-                replace = Replace.new
-                replace.replace_void(@connections_details,client,key,bytes,flag,exptime,noreply,@data,@validate,connection)
+              @gets.gets_void(@connections_details,client,@data,array)
 
-            when "append"
-                append = Append.new
-                append.append_void(@connections_details,client,key,bytes,flag,exptime,noreply,@data,@validate,connection)
+            when CONST_SET
 
-            when "prepend"
-                prepend = Prepend.new
-                prepend.prepend_void(@connections_details,client,key,bytes,flag,exptime,noreply,@data,@validate,connection)
+              @set.set_void(@connections_details,client,key,bytes,flag,exptime,noreply,@data,@validate,connection)
 
-            when "cas"
-                cas = Cas.new
-                token = array[5]
-                noreply = array[6]
-                cas.cas_void(@connections_details,client,key,token,bytes,flag,exptime,noreply,@data,@validate,connection)
+            when CONST_ADD
+
+              @add.add_void(@connections_details,client,key,bytes,flag,exptime,noreply,@data,@validate,connection)
+
+            when CONST_REPLACE
+
+              @replace.replace_void(@connections_details,client,key,bytes,flag,exptime,noreply,@data,@validate,connection)
+
+            when CONST_APPEND
+
+              @append.append_void(@connections_details,client,key,bytes,flag,exptime,noreply,@data,@validate,connection)
+
+            when CONST_PREPEND
+
+              @prepend.prepend_void(@connections_details,client,key,bytes,flag,exptime,noreply,@data,@validate,connection)
+
+            when CONST_CAS
+
+              token = array[5]
+              noreply = array[6]
+              @cas.cas_void(@connections_details,client,key,token,bytes,flag,exptime,noreply,@data,@validate,connection)
 
             else
-              @connections_details[:clients][client].puts "ERROR SYNTAX ERROR"
+
+              @connections_details[:clients][client].puts "ERROR"
+
             end
           else
-            @connections_details[:clients][client].puts "ERROR SYNTAX ERROR"
+            @connections_details[:clients][client].puts "ERROR"
           end
         end
+      end
     end
   end
 end
-
 
 Server.new( 3000, "localhost" )

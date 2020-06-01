@@ -1,4 +1,4 @@
-require_relative 'datos'
+require_relative 'memory'
 class Validation
 
   def validate_command(array)

@@ -5,7 +5,7 @@ class Client
     @socket = socket
     @request_object = send_request
     @response_object = listen_response
-
+    @semaphore = Mutex.new
     @request_object.join # will send the request to server
     @response_object.join # will receive response from server
   end
@@ -14,6 +14,7 @@ class Client
     puts "Please enter your username to establish a connection..."
     begin
       Thread.new do
+
         loop do
           message = $stdin.gets.chomp
           @socket.puts message

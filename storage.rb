@@ -8,12 +8,12 @@ module Storage
           connections_details[:clients][client].puts "STORED"
         end
       else
-        connections_details[:clients][client].puts "CLIENT-ERROR"
+        connections_details[:clients][client].puts "CLIENT_ERROR [WRONG VALUE OR WRONG BYTES]"
       end
     end
   end
 
-  class Set < StorageCommand
+  class Sets < StorageCommand
     def set_void(connections_details,client,key,bytes,flag,exptime,noreply,data,validate,connection)
       value = connection.gets.chomp
       set(connections_details,client,key,bytes,flag,exptime,noreply,data,validate,value)
@@ -43,7 +43,7 @@ module Storage
   end
 
   class Append < StorageCommand
-    def append_void(connections_details,client,key,bytes,flag,exptime,noreply,data,validate,connection)
+    def append_void(connections_details,client,key,bytes,flag,exptime,noreply,data,validate,connection,username)
       if data.hash_value.has_key?(key)
         value = connection.gets.chomp
         new_value = data.hash_value["#{key}"] + value
@@ -81,9 +81,10 @@ module Storage
           connections_details[:clients][client].puts "EXIST"
         end
       else
-        connections_details[:clients][client].puts "NOT_FOUND"
+        if client == username
+          connections_details[:clients][client].puts "NOT_FOUND"
+        end
       end
     end
   end
-
 end
