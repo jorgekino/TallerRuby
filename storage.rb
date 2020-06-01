@@ -43,7 +43,7 @@ module Storage
   end
 
   class Append < StorageCommand
-    def append_void(connections_details,client,key,bytes,flag,exptime,noreply,data,validate,connection,username)
+    def append_void(connections_details,client,key,bytes,flag,exptime,noreply,data,validate,connection)
       if data.hash_value.has_key?(key)
         value = connection.gets.chomp
         new_value = data.hash_value["#{key}"] + value
