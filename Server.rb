@@ -43,7 +43,6 @@ class Server
     @cas = Cas.new
     @get = Get.new
     @gets = Gets.new
-    @semaphore = Mutex.new
 
     puts 'Started server.........'
     run
